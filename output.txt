@@ -1,0 +1,603 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+The content has been processed where empty lines have been removed.
+
+================================================================
+File Summary
+================================================================
+
+Purpose:
+--------
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+
+File Format:
+------------
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Multiple file entries, each consisting of:
+  a. A separator line (================)
+  b. The file path (File: path/to/file)
+  c. Another separator line
+  d. The full contents of the file
+  e. A blank line
+
+Usage Guidelines:
+-----------------
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+
+Notes:
+------
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Empty lines have been removed from all files
+- Files are sorted by Git change count (files with more changes are at the bottom)
+
+Additional Info:
+----------------
+
+================================================================
+Directory Structure
+================================================================
+src/
+  index.ts
+tests/
+  index.test.ts
+.gitignore
+LICENSE
+package.json
+README.md
+tsconfig.json
+
+================================================================
+Files
+================================================================
+
+================
+File: src/index.ts
+================
+/**
+ * Reversible Arabic ↔ URL-safe slugifier.
+ *
+ * ASCII [A-Za-z0-9_-] pass through.
+ * All other supported chars are escaped as "~" + a short code.
+ * The escape‐prefix "~" never appears unescaped.
+ */
+const ESC = "~";
+const characterMap: Record<string, string> = {
+  "ا": "~a", "أ": "~A", "إ": "~I", "آ": "~Aa",
+  "ب": "~b", "ت": "~t", "ث": "~th", "ج": "~j",
+  "ح": "~h", "خ": "~kh", "د": "~d", "ذ": "~dh",
+  "ر": "~r", "ز": "~z", "س": "~s", "ش": "~sh",
+  "ص": "~S", "ض": "~D", "ط": "~T", "ظ": "~Z",
+  "ع": "~E", "غ": "~gh", "ف": "~f", "ق": "~q",
+  "ك": "~k", "ل": "~l", "م": "~m", "ن": "~n",
+  "ه": "~H", "و": "~w", "ي": "~y", "ى": "~Y",
+  "ة": "~ta", "ء": "~~x", "ؤ": "~wx", "ئ": "~yx",
+  "٠": "~0", "١": "~1", "٢": "~2", "٣": "~3", "٤": "~4",
+  "٥": "~5", "٦": "~6", "٧": "~7", "٨": "~8", "٩": "~9",
+  "ً": "~an", "ٌ": "~un", "ٍ": "~in", "َ": "~fa",
+  "ُ": "~da", "ِ": "~ka",
+  "ّ": "~sh2",
+  "ْ": "~su",
+  "ـ": "~tt",
+  " ": "~_", ".": "~dt", ",": "~cm", ":": "~cl",
+  ";": "~sc", "!": "~ex", "?": "~qu", "(": "~lp",
+  ")": "~rp", "[": "~lb", "]": "~rb", "{": "~lc",
+  "}": "~rc", '"': "~qt", "'": "~ap", "/": "~sl",
+  "\\": "~bs", "&": "~am", "%": "~pc", "#": "~hs",
+  "@": "~at", "$": "~dl", "+": "~pl", "=": "~eq",
+  "<": "~lt", ">": "~gt", "|": "~pi", "~": "~~t",
+  "؟": "~qm", "،": "~cm2", "٪": "~pc2"
+};
+const reverseMap: Record<string, string> = {};
+for (const [ k, v ] of Object.entries(characterMap)) {
+  reverseMap[ v ] = k;
+}
+const escapes = Object.keys(reverseMap).sort((a, b) => b.length - a.length);
+/**
+ * slugify(input):
+ *  - ASCII [A-Za-z0-9_-] pass through
+ *  - others must exist in characterMap or we throw
+ */
+export function slugify(input: string): string {
+  if (!input) return "";
+  const out: string[] = [], bad: string[] = [];
+  for (const ch of input) {
+    if (/^[A-Za-z0-9_-]$/.test(ch)) out.push(ch);
+    else if (ch in characterMap) out.push(characterMap[ ch ]);
+    else bad.push(ch);
+  }
+  if (bad.length) {
+    throw new Error(`Unsupported character(s): ${ [ ...new Set(bad) ].join(", ") }`);
+  }
+  return out.join("");
+}
+/**
+ * deslugify(slug):
+ *  - whenever we see "~", try the longest matching escape‐code
+ *  - otherwise preserve the ASCII char
+ */
+export function deslugify(slug: string): string {
+  let i = 0, out = "";
+  while (i < slug.length) {
+    if (slug[ i ] === ESC) {
+      let matched = false;
+      for (const code of escapes) {
+        if (slug.startsWith(code, i)) {
+          out += reverseMap[ code ];
+          i += code.length;
+          matched = true;
+          break;
+        }
+      }
+      if (matched) continue;
+    }
+    out += slug[ i++ ];
+  }
+  return out;
+}
+/** Round‐trip check */
+export function isReversible(text: string): boolean {
+  try {
+    return deslugify(slugify(text)) === text;
+  } catch {
+    return false;
+  }
+}
+
+================
+File: tests/index.test.ts
+================
+import { describe, expect, it } from 'bun:test';
+import { deslugify, isReversible, slugify } from "../src/index";
+describe("Arabic-Slugifier round-trips", () => {
+  const cases = [
+    "مرحبا بالعالم",
+    "الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ",
+    "بسم الله الرحمن الرحيم",
+    "العربية الفصحى",
+    "اللغة العربية الجميلة",
+    "القرآن الكريم",
+    "محمد رسول الله",
+    "أحمد علي فاطمة خديجة عائشة",
+    "ياء ى و همزة ء ؤ ئ تاء مربوطة ة الف مقصورة ى",
+    "التطويل بـيـن الأحـرف",
+    "٠١٢٣٤٥٦٧٨٩",
+    "الأرقام العربية ١٢٣٤٥",
+    "الشدة فوق الحرف بّ تّ ثّ جّ حّ خّ",
+    "التنوين: ـً ـٌ ـٍ",
+    "السكون والجزم: اَلْبَيْتُ اَلْقَمَرُ",
+    "مزيج من ١٢٣ والحروف العربية",
+    "كلمات-بها_واصلات-123",
+    'النص: مع علامات ترقيم!',
+    "سؤال؟ جواب.",
+    "قائمة: (١) أول، (٢) ثاني، (٣) ثالث.",
+    'المقال#١: "التقنية في ٢٠٢٤" - نظرة عامة',
+    "البريد الإلكتروني: user@example.com",
+    "النسبة: ٧٥٪ من المستخدمين",
+    "المعادلة: ٢ + ٢ = ٤",
+    "ث vs ت + ه",
+    "خ vs ك + ه",
+    "ش vs س + ه",
+    "ذ vs د + ه",
+    "غ vs غ + ه",
+    "", "a", "ا", " ", "---", "___",
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+  ];
+  for (const txt of cases) {
+    it(`"${ txt }" ↔ slug ↔ back`, () => {
+      const s = slugify(txt);
+      const d = deslugify(s);
+      expect(d).toBe(txt);
+      expect(isReversible(txt)).toBe(true);
+    });
+  }
+});
+describe("ASCII & determinism", () => {
+  it("ASCII a–z A–Z 0–9 _ - untouched", () => {
+    const t = "ABC-xyz_0123";
+    expect(slugify(t)).toBe(t);
+    expect(deslugify(t)).toBe(t);
+  });
+  it("same input ⇒ same slug every time", () => {
+    const t = "مرحبا بالعالم ثلاثة خمسة";
+    const s1 = slugify(t);
+    const s2 = slugify(t);
+    expect(s1).toBe(s2);
+    expect(deslugify(s1)).toBe(t);
+  });
+  it("throws on unknown chars", () => {
+    expect(() => slugify("hello€world")).toThrow(/Unsupported character/);
+  });
+});
+
+================
+File: .gitignore
+================
+# Based on https://raw.githubusercontent.com/github/gitignore/main/Node.gitignore
+
+# Logs
+
+logs
+_.log
+npm-debug.log_
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Caches
+
+.cache
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# Runtime data
+
+pids
+_.pid
+_.seed
+*.pid.lock
+
+# Directory for instrumented libs generated by jscoverage/JSCover
+
+lib-cov
+
+# Coverage directory used by tools like istanbul
+
+coverage
+*.lcov
+
+# nyc test coverage
+
+.nyc_output
+
+# Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
+
+.grunt
+
+# Bower dependency directory (https://bower.io/)
+
+bower_components
+
+# node-waf configuration
+
+.lock-wscript
+
+# Compiled binary addons (https://nodejs.org/api/addons.html)
+
+build/Release
+
+# Dependency directories
+
+node_modules/
+jspm_packages/
+
+# Snowpack dependency directory (https://snowpack.dev/)
+
+web_modules/
+
+# TypeScript cache
+
+*.tsbuildinfo
+
+# Optional npm cache directory
+
+.npm
+
+# Optional eslint cache
+
+.eslintcache
+
+# Optional stylelint cache
+
+.stylelintcache
+
+# Microbundle cache
+
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+
+.node_repl_history
+
+# Output of 'npm pack'
+
+*.tgz
+
+# Yarn Integrity file
+
+.yarn-integrity
+
+# dotenv environment variable files
+
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# parcel-bundler cache (https://parceljs.org/)
+
+.parcel-cache
+
+# Next.js build output
+
+.next
+out
+
+# Nuxt.js build / generate output
+
+.nuxt
+dist
+
+# Gatsby files
+
+# Comment in the public line in if your project uses Gatsby and not Next.js
+
+# https://nextjs.org/blog/next-9-1#public-directory-support
+
+# public
+
+# vuepress build output
+
+.vuepress/dist
+
+# vuepress v2.x temp and cache directory
+
+.temp
+
+# Docusaurus cache and generated files
+
+.docusaurus
+
+# Serverless directories
+
+.serverless/
+
+# FuseBox cache
+
+.fusebox/
+
+# DynamoDB Local files
+
+.dynamodb/
+
+# TernJS port file
+
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+
+.vscode-test
+
+# yarn v2
+
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store
+
+================
+File: LICENSE
+================
+MIT License
+
+Copyright (c) 2025 Awa
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================
+File: package.json
+================
+{
+  "name": "reversible-arabic-slugifier",
+  "version": "1.0.0",
+  "description": "A deterministic, reversible Arabic text to URL-safe slug converter with perfect round-trip fidelity",
+  "module": "index.ts",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "arabic",
+    "slug",
+    "url",
+    "transliterate",
+    "reversible",
+    "typescript"
+  ],
+  "author": "Awa alwalxed@proton.me",
+  "license": "MIT",
+  "homepage": "https://github.com/alwalxed/reversible-arabic-slugifier",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alwalxed/reversible-arabic-slugifier.git"
+  },
+  "bugs": {
+    "url": "https://github.com/alwalxed/reversible-arabic-slugifier/issues"
+  }
+}
+
+================
+File: README.md
+================
+# Reversible Arabic Slugifier
+
+A deterministic, reversible Arabic text to URL-safe slug converter with perfect round-trip fidelity.
+
+## Features
+
+✅ **Perfect Reversibility**: Convert Arabic text to slugs and back with 100% accuracy  
+✅ **Deterministic**: Same input always produces the same output  
+✅ **URL-Safe**: Generated slugs are safe for use in URLs  
+✅ **Comprehensive**: Supports Arabic letters, diacritics, Arabic-Indic numerals, and common punctuation  
+✅ **TypeScript**: Full TypeScript support with type definitions  
+✅ **Zero Dependencies**: Lightweight with no external dependencies  
+✅ **Well Tested**: Comprehensive test suite with high coverage
+
+## Installation
+
+```bash
+# npm
+npm install reversible-arabic-slugifier
+
+# pnpm
+pnpm add reversible-arabic-slugifier
+
+# yarn
+yarn add reversible-arabic-slugifier
+
+# bun
+bun i reversible-arabic-slugifier
+```
+
+## Quick Start
+
+```typescript
+import { slugify, deslugify } from "reversible-arabic-slugifier";
+
+// Convert Arabic text to slug
+const arabicText = "مرحبا بالعالم";
+const slug = slugify(arabicText);
+console.log(slug); // 'xmxrxhxbxa-xbxalxExalxm'
+
+// Convert slug back to original Arabic text
+const originalText = deslugify(slug);
+console.log(originalText); // 'مرحبا بالعالم'
+
+// Perfect round-trip
+console.log(originalText === arabicText); // true
+```
+
+## Supported Characters
+
+### Arabic Letters
+
+- All 28 Arabic letters: ا ب ت ث ج ح خ د ذ ر ز س ش ص ض ط ظ ع غ ف ق ك ل م ن ه و ي
+- Special forms: أ إ آ ى ة ء ؤ ئ
+
+### Diacritics (Tashkeel)
+
+- Short vowels: َ ُ ِ
+- Tanween: ً ٌ ٍ
+- Other marks: ّ ْ ـ
+
+### Numerals
+
+- Arabic-Indic digits: ٠ ١ ٢ ٣ ٤ ٥ ٦ ٧ ٨ ٩
+- ASCII digits: 0-9
+
+### Other Characters
+
+- ASCII letters: a-z, A-Z
+- Common punctuation: . , : ; ! ? ( ) [ ] { } " ' / \ & % # @ $ + = < > | ~ `
+- Special characters: - \_ (preserved as-is)
+- Spaces (converted to dashes)
+
+## How It Works
+
+The slugifier uses a unique escape-sequence approach to ensure deterministic reversibility:
+
+1. **Unique Mapping**: Each Arabic character maps to a unique escape sequence starting with 'x'
+2. **Conflict Resolution**: Multi-character sequences like 'th' for 'ث' don't conflict with separate 't' + 'h' characters
+3. **Greedy Matching**: During deslugification, the longest possible sequences are matched first
+4. **ASCII Preservation**: ASCII alphanumeric characters, dashes, and underscores are preserved as-is
+
+## Error Handling
+
+The slugifier throws descriptive errors for unsupported characters:
+
+```typescript
+try {
+  slugify("Hello € World");
+} catch (error) {
+  console.log(error.message); // "Unsupported character(s) found: €"
+}
+```
+
+## Contributing
+
+If you encounter any issues or have suggestions, please submit them via issues or pull requests.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](https://github.com/alwalxed/reversible-arabic-slugifier/blob/main/LICENSE) file for details.
+
+================
+File: tsconfig.json
+================
+{
+  "compilerOptions": {
+    // Enable latest features
+    "lib": ["ESNext", "DOM"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+    "allowJs": true,
+
+    // Bundler mode
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+
+    // Best practices
+    "strict": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+
+    // Some stricter flags (disabled by default)
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noPropertyAccessFromIndexSignature": false
+  }
+}
+
+
+
+================================================================
+End of Codebase
+================================================================
